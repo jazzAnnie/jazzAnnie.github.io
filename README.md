@@ -1,3 +1,5 @@
+jazzAnnie
+
 A [Jekyll](https://jekyllrb.com/) blog template made for simple, readable snippets of your brain drippings.
 
 [DEMO](http://adueck.github.io/cayman-blog/)
