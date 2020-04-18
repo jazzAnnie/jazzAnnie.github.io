@@ -1,4 +1,4 @@
-jazzAnnie
+jazzAnnie.github.io
 
 A [Jekyll](https://jekyllrb.com/) blog template made for simple, readable snippets of your brain drippings.
 
