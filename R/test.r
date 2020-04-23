@@ -26,3 +26,16 @@ prop.woman
 #자료의 개수
  n=length(prop.woman)
  n
+
+#5개의 계급으로 나누기
+ cat.job=cut(prop.woman, breaks=c(0,20,40,60,80,100))
+ cat.job
+
+#도수분포표
+table(cat.job)
+levels(cat.job)=c("0-20%",'20-40%','40-60%','60-80%','80-100%')
+table(cat.job)
+
+#X축에 자료가 표시되는 히스토그램
+hist(prop.woman, breaks=c(0,20,40,60,80,100), main="여성의 비율에 대한 히스토그램", xlab="여성의 비율")
+rug(jitter(prop.woman))
