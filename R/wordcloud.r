@@ -34,13 +34,23 @@
 
 
 
+## 실행환경
+## 크롬 업그레이드: 83 버전 참고: https://codechacha.com/ko/selenium-chromedriver-version-error/
 
 library(rvest)
 library(RSelenium)
 library(httr)
 library(stringr)
 
-urlFront <- 'https://search.naver.com/search.naver?&where=news&query=galaxynote9&sm=tab_pge&sort=1&photo=0&field=0&reporter_article=&pd=3&ds=2018.08.07&de=2018.08.12&docid=&nso=so:dd,p:from20180807to20180812,a:all&mynews=0&start=' #News 검색 결과 페이지 앞부분 설정 
+# org code :http://blog.naver.com/PostView.nhn?blogId=nife0719&logNo=221342314551&parentCategoryNo=&categoryNo=30&viewDate=&isShowPopularPosts=false&from=postView
+# urlFront <- 'https://search.naver.com/search.naver?&where=news&query=galaxynote9&sm=tab_pge&sort=1&photo=0&field=0&reporter_article=&pd=3&ds=2018.08.07&de=2018.08.12&docid=&nso=so:dd,p:from20180807to20180812,a:all&mynews=0&start=' #News 검색 결과 페이지 앞부분 설정 
+# urlBack <- '&refresh_start=0'
+# [출처] [R] 베어베어 크롤링 시리즈: 4.네이버 뉴스 검색, 멜론 차트 및 가사 스크래핑하기|작성자 베어베어스
+
+## change code
+keyword <-'5%EB%85%84%EC%B0%A8%20%EC%A7%81%EC%9E%A5%EC%9D%B8' #5년차 직장인, URL 인코딩 변환: http://seb.kr/url/
+urlFront <- paste0('https://search.naver.com/search.naver?&where=news&query=',keyword,
+'&sm=tab_pge&sort=1&photo=0&field=0&reporter_article=&pd=3&ds=2019.01.01&de=2020.05.01&docid=&nso=so:dd,p:from20190101to20200501,a:all&mynews=0&start=') #News 검색 결과 페이지 앞부분 설정 
 urlBack <- '&refresh_start=0'
 
 urls <- NULL
