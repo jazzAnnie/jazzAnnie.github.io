@@ -74,7 +74,6 @@
     gap: 6px;
   }
   .export-divider { border-top: 1px solid var(--border); margin: 2px 0; }
-  .export-hint { font-size: 11px; color: var(--muted); }
 
   main { padding: 16px 32px 40px; max-width: 1100px; margin: 0 auto; }
 
@@ -187,9 +186,7 @@
     color: var(--muted);
   }
   .export-panel .folder-label strong { color: var(--text); font-weight: 500; }
-  .export-panel .gh-status { font-size: 12px; color: var(--muted); }
-  .export-panel .gh-status strong { color: var(--text); font-weight: 500; }
-  .export-panel input[type=text], .export-panel input[type=password] {
+  .export-panel input[type=text] {
     padding: 7px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -265,16 +262,6 @@
             <span class="folder-label" id="folderLabel">저장 폴더: 선택 안 됨 (저장 시 다운로드 폴더로 저장됩니다)</span>
             <button class="btn-secondary btn-small" id="chooseFolderBtn">폴더 선택</button>
             <button class="btn-primary btn-small" id="saveMdBtn">🖥️ 로컬에 저장</button>
-          </div>
-
-          <div class="export-divider"></div>
-
-          <div class="export-section">
-            <div class="export-section-title">🐙 GitHub 저장</div>
-            <span class="gh-status" id="ghStatusLabel">jazzAnnie/jazzAnnie.github.io</span>
-            <input type="password" id="ghTokenInput" placeholder="GitHub Personal Access Token">
-            <div class="export-hint">이 브라우저에만 저장되며, GitHub API 요청 외에는 사용되지 않습니다.</div>
-            <button class="btn-primary btn-small" id="saveGithubBtn">🐙 GitHub에 저장</button>
           </div>
         </div>
       </div>
@@ -701,9 +688,6 @@ const chooseFolderBtn = document.getElementById('chooseFolderBtn');
 const saveMdBtn = document.getElementById('saveMdBtn');
 const exportToggleBtn = document.getElementById('exportToggleBtn');
 const exportPanel = document.getElementById('exportPanel');
-const ghTokenInput = document.getElementById('ghTokenInput');
-const ghStatusLabel = document.getElementById('ghStatusLabel');
-const saveGithubBtn = document.getElementById('saveGithubBtn');
 
 exportToggleBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -849,86 +833,6 @@ async function saveMarkdown() {
 
 chooseFolderBtn.addEventListener('click', chooseFolder);
 saveMdBtn.addEventListener('click', saveMarkdown);
-
-// ---- Save directly to GitHub via the Contents API ----
-
-const GH_TOKEN_KEY = 'ghToken';
-const GITHUB_OWNER = 'jazzAnnie';
-const GITHUB_REPO = 'jazzAnnie.github.io';
-const GITHUB_BRANCH = 'master';
-const GITHUB_PATH_PREFIX = 'note_history/';
-
-function updateGithubStatus() {
-  const filename = resolveFilename();
-  ghStatusLabel.innerHTML = `저장 위치: <strong>${escapeHtml(GITHUB_OWNER)}/${escapeHtml(GITHUB_REPO)}</strong><br>${escapeHtml(GITHUB_PATH_PREFIX + filename)}`;
-}
-
-function utf8ToBase64(str) {
-  return btoa(unescape(encodeURIComponent(str)));
-}
-
-async function saveToGithub() {
-  const token = ghTokenInput.value.trim();
-  if (!token) {
-    alert('GitHub Personal Access Token을 입력해주세요.\n(repo 쓰기 권한이 있는 토큰이 필요합니다)');
-    ghTokenInput.focus();
-    return;
-  }
-  localStorage.setItem(GH_TOKEN_KEY, token);
-
-  const filename = resolveFilename();
-  const path = GITHUB_PATH_PREFIX + filename;
-  const md = buildMarkdown();
-  const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-  };
-
-  saveGithubBtn.disabled = true;
-  const originalLabel = saveGithubBtn.textContent;
-  saveGithubBtn.textContent = '저장 중...';
-
-  try {
-    let sha;
-    const getRes = await fetch(`${apiUrl}?ref=${GITHUB_BRANCH}`, { headers });
-    if (getRes.ok) {
-      const data = await getRes.json();
-      sha = data.sha;
-    } else if (getRes.status !== 404) {
-      throw new Error(`파일 조회 실패 (HTTP ${getRes.status})`);
-    }
-
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: `역사 연표 업데이트 (웹앱에서 저장)`,
-        content: utf8ToBase64(md),
-        branch: GITHUB_BRANCH,
-        sha,
-      }),
-    });
-
-    if (!putRes.ok) {
-      const err = await putRes.json().catch(() => ({}));
-      throw new Error(err.message || `HTTP ${putRes.status}`);
-    }
-
-    alert(`GitHub에 저장되었습니다: ${GITHUB_OWNER}/${GITHUB_REPO}/${path}`);
-  } catch (err) {
-    console.error(err);
-    alert('GitHub 저장 실패: ' + err.message);
-  } finally {
-    saveGithubBtn.disabled = false;
-    saveGithubBtn.textContent = originalLabel;
-  }
-}
-
-ghTokenInput.value = localStorage.getItem(GH_TOKEN_KEY) || '';
-filenameInput.addEventListener('input', updateGithubStatus);
-saveGithubBtn.addEventListener('click', saveToGithub);
-updateGithubStatus();
 
 restoreFolder();
 render();
