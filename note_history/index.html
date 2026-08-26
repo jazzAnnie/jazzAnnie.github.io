@@ -146,6 +146,22 @@
 
   .count { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 
+  th.select-col, td.select-col { width: 34px; text-align: center; padding-left: 8px; padding-right: 8px; }
+
+  .bulk-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #fbf3ec;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .bulk-bar.show { display: flex; }
+  .bulk-bar .bulk-label { font-weight: 500; color: var(--text); margin-right: auto; }
+
   .export-panel .folder-label {
     font-size: 12px;
     color: var(--muted);
@@ -228,9 +244,17 @@
 
   <div class="count" id="countLabel"></div>
 
+  <div class="bulk-bar" id="bulkBar">
+    <span class="bulk-label" id="bulkBarLabel">0개 선택됨</span>
+    <button class="btn-secondary btn-small" id="bulkEditBtn">일괄 수정</button>
+    <button class="btn-danger btn-small" id="bulkDeleteBtn">일괄 삭제</button>
+    <button class="btn-secondary btn-small" id="bulkClearBtn">선택 해제</button>
+  </div>
+
   <table>
     <thead>
       <tr>
+        <th class="select-col"><input type="checkbox" id="selectAllCheckbox"></th>
         <th style="width:80px">연도</th>
         <th style="width:60px">월</th>
         <th style="width:100px">지역</th>
@@ -240,6 +264,7 @@
         <th style="width:110px"></th>
       </tr>
       <tr class="filter-row">
+        <th></th>
         <th><input type="text" class="col-filter" data-field="year" placeholder="필터"></th>
         <th><input type="text" class="col-filter" data-field="month" placeholder="필터"></th>
         <th><input type="text" class="col-filter" data-field="region" placeholder="필터"></th>
@@ -296,6 +321,45 @@
   </div>
 </div>
 
+<div class="overlay" id="bulkOverlay">
+  <div class="modal">
+    <h2>선택한 <span id="bulkCount">0</span>개 항목 일괄 수정</h2>
+    <div class="sub" style="margin-bottom:12px; font-size:12px; color:var(--muted);">비워둔 항목은 변경되지 않습니다.</div>
+    <form id="bulkEditForm">
+      <div class="field-row">
+        <div class="field">
+          <label for="bulkYear">연도</label>
+          <input type="number" id="bulkYear" placeholder="변경 안 함">
+        </div>
+        <div class="field">
+          <label for="bulkMonth">월 (1~12)</label>
+          <input type="number" id="bulkMonth" min="1" max="12" placeholder="변경 안 함">
+        </div>
+      </div>
+      <div class="field">
+        <label for="bulkRegion">지역</label>
+        <input type="text" id="bulkRegion" placeholder="변경 안 함">
+      </div>
+      <div class="field">
+        <label for="bulkContent">내용</label>
+        <textarea id="bulkContent" placeholder="변경 안 함"></textarea>
+      </div>
+      <div class="field">
+        <label for="bulkInsight">시사점</label>
+        <textarea id="bulkInsight" placeholder="변경 안 함"></textarea>
+      </div>
+      <div class="field">
+        <label for="bulkReference">참고</label>
+        <input type="text" id="bulkReference" placeholder="변경 안 함">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="bulkCancelBtn">취소</button>
+        <button type="submit" class="btn-primary">일괄 적용</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 const STORAGE_KEY = 'historyEvents';
 
@@ -324,6 +388,8 @@ function saveEvents(events) {
 
 let events = loadEvents();
 let editingId = null;
+let selectedIds = new Set();
+let lastFilteredIds = [];
 
 const tableBody = document.getElementById('tableBody');
 const countLabel = document.getElementById('countLabel');
@@ -334,6 +400,16 @@ const modalTitle = document.getElementById('modalTitle');
 const continueAddLabel = document.getElementById('continueAddLabel');
 const continueAdd = document.getElementById('continueAdd');
 const colFilterInputs = document.querySelectorAll('.col-filter');
+const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+const bulkBar = document.getElementById('bulkBar');
+const bulkBarLabel = document.getElementById('bulkBarLabel');
+const bulkEditBtn = document.getElementById('bulkEditBtn');
+const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+const bulkClearBtn = document.getElementById('bulkClearBtn');
+const bulkOverlay = document.getElementById('bulkOverlay');
+const bulkEditForm = document.getElementById('bulkEditForm');
+const bulkCount = document.getElementById('bulkCount');
+const bulkCancelBtn = document.getElementById('bulkCancelBtn');
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -366,14 +442,22 @@ function render() {
   filtered.sort((a, b) => (a.year - b.year) || ((a.month || 0) - (b.month || 0)));
 
   countLabel.textContent = `총 ${filtered.length}건`;
+  lastFilteredIds = filtered.map(e => e.id);
+
+  for (const id of [...selectedIds]) {
+    if (!events.some(ev => ev.id === id)) selectedIds.delete(id);
+  }
 
   if (filtered.length === 0) {
-    tableBody.innerHTML = `<tr class="empty-row"><td colspan="7">항목이 없습니다.</td></tr>`;
+    tableBody.innerHTML = `<tr class="empty-row"><td colspan="8">항목이 없습니다.</td></tr>`;
+    updateBulkBar();
+    updateSelectAllCheckbox();
     return;
   }
 
   tableBody.innerHTML = filtered.map(e => `
     <tr data-id="${e.id}">
+      <td class="select-col"><input type="checkbox" class="row-select" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''}></td>
       <td class="year">${escapeHtml(e.year)}</td>
       <td class="month">${e.month ? escapeHtml(e.month) : ''}</td>
       <td class="region">${escapeHtml(e.region)}</td>
@@ -386,6 +470,26 @@ function render() {
       </td>
     </tr>
   `).join('');
+
+  updateBulkBar();
+  updateSelectAllCheckbox();
+}
+
+function updateBulkBar() {
+  const count = selectedIds.size;
+  bulkBarLabel.textContent = `${count}개 선택됨`;
+  bulkBar.classList.toggle('show', count > 0);
+}
+
+function updateSelectAllCheckbox() {
+  if (lastFilteredIds.length === 0) {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = false;
+    return;
+  }
+  const selectedCount = lastFilteredIds.filter(id => selectedIds.has(id)).length;
+  selectAllCheckbox.checked = selectedCount === lastFilteredIds.length;
+  selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < lastFilteredIds.length;
 }
 
 function openModal(entry) {
@@ -460,10 +564,89 @@ tableBody.addEventListener('click', (e) => {
   if (e.target.classList.contains('delete-btn')) {
     if (confirm('이 항목을 삭제하시겠습니까?')) {
       events = events.filter(ev => ev.id !== id);
+      selectedIds.delete(id);
       saveEvents(events);
       render();
     }
   }
+});
+
+tableBody.addEventListener('change', (e) => {
+  if (!e.target.classList.contains('row-select')) return;
+  const id = e.target.dataset.id;
+  if (e.target.checked) selectedIds.add(id);
+  else selectedIds.delete(id);
+  updateBulkBar();
+  updateSelectAllCheckbox();
+});
+
+selectAllCheckbox.addEventListener('change', () => {
+  if (selectAllCheckbox.checked) {
+    lastFilteredIds.forEach(id => selectedIds.add(id));
+  } else {
+    lastFilteredIds.forEach(id => selectedIds.delete(id));
+  }
+  render();
+});
+
+bulkClearBtn.addEventListener('click', () => {
+  selectedIds.clear();
+  render();
+});
+
+bulkDeleteBtn.addEventListener('click', () => {
+  if (selectedIds.size === 0) return;
+  if (confirm(`선택한 ${selectedIds.size}개 항목을 삭제하시겠습니까?`)) {
+    events = events.filter(ev => !selectedIds.has(ev.id));
+    selectedIds.clear();
+    saveEvents(events);
+    render();
+  }
+});
+
+function openBulkEdit() {
+  if (selectedIds.size === 0) return;
+  bulkCount.textContent = selectedIds.size;
+  bulkEditForm.reset();
+  bulkOverlay.classList.add('open');
+}
+
+function closeBulkEdit() {
+  bulkOverlay.classList.remove('open');
+}
+
+bulkEditBtn.addEventListener('click', openBulkEdit);
+bulkCancelBtn.addEventListener('click', closeBulkEdit);
+bulkOverlay.addEventListener('click', (e) => { if (e.target === bulkOverlay) closeBulkEdit(); });
+
+bulkEditForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const yearRaw = document.getElementById('bulkYear').value.trim();
+  const monthRaw = document.getElementById('bulkMonth').value.trim();
+  const region = document.getElementById('bulkRegion').value.trim();
+  const content = document.getElementById('bulkContent').value.trim();
+  const insight = document.getElementById('bulkInsight').value.trim();
+  const reference = document.getElementById('bulkReference').value.trim();
+
+  const patch = {};
+  if (yearRaw !== '') patch.year = parseInt(yearRaw, 10);
+  if (monthRaw !== '') patch.month = parseInt(monthRaw, 10);
+  if (region !== '') patch.region = region;
+  if (content !== '') patch.content = content;
+  if (insight !== '') patch.insight = insight;
+  if (reference !== '') patch.reference = reference;
+
+  if (Object.keys(patch).length === 0) {
+    alert('변경할 항목을 하나 이상 입력해주세요.');
+    return;
+  }
+
+  events.forEach(ev => {
+    if (selectedIds.has(ev.id)) Object.assign(ev, patch);
+  });
+  saveEvents(events);
+  closeBulkEdit();
+  render();
 });
 
 searchInput.addEventListener('input', render);
