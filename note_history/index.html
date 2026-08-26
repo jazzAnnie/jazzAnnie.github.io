@@ -96,6 +96,28 @@
   td.actions button { margin-left: 4px; }
   .empty-row td { text-align: center; color: var(--muted); padding: 32px; }
 
+  .filter-row th {
+    padding: 4px 8px 8px;
+    background: #fbfaf8;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-row input.col-filter {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+  }
+  .filter-row input.col-filter:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
   .count { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 
   .save-bar {
@@ -201,6 +223,15 @@
         <th style="width:140px">참고</th>
         <th style="width:110px"></th>
       </tr>
+      <tr class="filter-row">
+        <th><input type="text" class="col-filter" data-field="year" placeholder="필터"></th>
+        <th><input type="text" class="col-filter" data-field="month" placeholder="필터"></th>
+        <th><input type="text" class="col-filter" data-field="region" placeholder="필터"></th>
+        <th><input type="text" class="col-filter" data-field="content" placeholder="필터"></th>
+        <th><input type="text" class="col-filter" data-field="insight" placeholder="필터"></th>
+        <th><input type="text" class="col-filter" data-field="reference" placeholder="필터"></th>
+        <th></th>
+      </tr>
     </thead>
     <tbody id="tableBody"></tbody>
   </table>
@@ -286,6 +317,7 @@ const entryForm = document.getElementById('entryForm');
 const modalTitle = document.getElementById('modalTitle');
 const continueAddLabel = document.getElementById('continueAddLabel');
 const continueAdd = document.getElementById('continueAdd');
+const colFilterInputs = document.querySelectorAll('.col-filter');
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -295,12 +327,24 @@ function escapeHtml(str) {
 
 function render() {
   const query = searchInput.value.trim().toLowerCase();
+  const colFilters = {};
+  colFilterInputs.forEach(input => {
+    const v = input.value.trim().toLowerCase();
+    if (v) colFilters[input.dataset.field] = v;
+  });
+
   const filtered = events.filter(e => {
-    if (!query) return true;
-    return [e.year, e.month, e.region, e.content, e.insight, e.reference]
-      .join(' ')
-      .toLowerCase()
-      .includes(query);
+    if (query) {
+      const matchesQuery = [e.year, e.month, e.region, e.content, e.insight, e.reference]
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+      if (!matchesQuery) return false;
+    }
+    for (const [field, value] of Object.entries(colFilters)) {
+      if (!String(e[field] ?? '').toLowerCase().includes(value)) return false;
+    }
+    return true;
   });
 
   filtered.sort((a, b) => (a.year - b.year) || ((a.month || 0) - (b.month || 0)));
@@ -407,6 +451,7 @@ tableBody.addEventListener('click', (e) => {
 });
 
 searchInput.addEventListener('input', render);
+colFilterInputs.forEach(input => input.addEventListener('input', render));
 
 // ---- Save as Markdown (.txt) with user-chosen folder ----
 
