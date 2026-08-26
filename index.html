@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>역사 연표 관리</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --border: #e2e0dc;
+    --text: #2b2a27;
+    --muted: #7a776f;
+    --accent: #b1552f;
+    --accent-hover: #963f1c;
+    --danger: #b3261e;
+    --danger-hover: #8f1d17;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 24px 32px 8px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; }
+
+  main { padding: 16px 32px 40px; max-width: 1100px; margin: 0 auto; }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input[type=text] {
+    flex: 1;
+    min-width: 180px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: #efeee9; color: var(--text); }
+  .btn-secondary:hover { background: #e3e1da; }
+  .btn-danger { background: transparent; color: var(--danger); }
+  .btn-danger:hover { background: #fbeceb; }
+  .btn-small { padding: 4px 10px; font-size: 12px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  thead th {
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: #fbfaf8;
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #faf7f2; }
+  td.year { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.month { text-align: center; white-space: nowrap; }
+  td.region { white-space: nowrap; }
+  td.actions { white-space: nowrap; text-align: right; }
+  td.actions button { margin-left: 4px; }
+  .empty-row td { text-align: center; color: var(--muted); padding: 32px; }
+
+  .count { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
+  .save-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    flex-wrap: wrap;
+  }
+  .save-bar .folder-label {
+    font-size: 13px;
+    color: var(--muted);
+    flex: 1;
+    min-width: 160px;
+  }
+  .save-bar .folder-label strong { color: var(--text); font-weight: 500; }
+  .save-bar input[type=text] {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    width: 180px;
+  }
+
+  /* Modal */
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(20, 18, 14, 0.4);
+    align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 24px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+  }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .field textarea { resize: vertical; min-height: 56px; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>역사 연표 관리</h1>
+  <div class="sub">연도별 역사적 사건을 기록하고 관리합니다 (브라우저에 자동 저장됩니다)</div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="연도, 지역, 내용으로 검색...">
+    <button class="btn-primary" id="addBtn">+ 새 항목 추가</button>
+  </div>
+
+  <div class="save-bar">
+    <span class="folder-label" id="folderLabel">저장 폴더: 선택 안 됨 (저장 시 다운로드 폴더로 저장됩니다)</span>
+    <button class="btn-secondary" id="chooseFolderBtn">폴더 선택</button>
+    <input type="text" id="filenameInput" value="역사연표.txt">
+    <button class="btn-primary" id="saveMdBtn">마크다운으로 저장</button>
+  </div>
+
+  <div class="count" id="countLabel"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:80px">연도</th>
+        <th style="width:60px">월</th>
+        <th style="width:100px">지역</th>
+        <th>내용</th>
+        <th style="width:160px">시사점</th>
+        <th style="width:140px">참고</th>
+        <th style="width:110px"></th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">새 항목 추가</h2>
+    <form id="entryForm">
+      <input type="hidden" id="entryId">
+      <div class="field-row">
+        <div class="field">
+          <label for="year">연도</label>
+          <input type="number" id="year" required>
+        </div>
+        <div class="field">
+          <label for="month">월 (1~12)</label>
+          <input type="number" id="month" min="1" max="12">
+        </div>
+      </div>
+      <div class="field">
+        <label for="region">지역</label>
+        <input type="text" id="region">
+      </div>
+      <div class="field">
+        <label for="content">내용</label>
+        <textarea id="content" required></textarea>
+      </div>
+      <div class="field">
+        <label for="insight">시사점</label>
+        <textarea id="insight"></textarea>
+      </div>
+      <div class="field">
+        <label for="reference">참고</label>
+        <input type="text" id="reference">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelBtn">취소</button>
+        <button type="submit" class="btn-primary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'historyEvents';
+
+const seedData = [
+  { id: crypto.randomUUID(), year: 1789, month: 1, region: '미국', content: '총선 실시, 국회 구성', insight: '', reference: '세계통찰 (미국편)' },
+  { id: crypto.randomUUID(), year: 1789, month: 2, region: '미국', content: '초대 대통령 선거, 조지 워싱턴(57세) 당선(지지율 100%)', insight: '', reference: '' },
+  { id: crypto.randomUUID(), year: 1789, month: 4, region: '미국', content: '취임식', insight: '', reference: '' },
+];
+
+function loadEvents() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    saveEvents(seedData);
+    return seedData;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+function saveEvents(events) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+}
+
+let events = loadEvents();
+let editingId = null;
+
+const tableBody = document.getElementById('tableBody');
+const countLabel = document.getElementById('countLabel');
+const searchInput = document.getElementById('searchInput');
+const overlay = document.getElementById('overlay');
+const entryForm = document.getElementById('entryForm');
+const modalTitle = document.getElementById('modalTitle');
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+function render() {
+  const query = searchInput.value.trim().toLowerCase();
+  const filtered = events.filter(e => {
+    if (!query) return true;
+    return [e.year, e.month, e.region, e.content, e.insight, e.reference]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+
+  filtered.sort((a, b) => (a.year - b.year) || ((a.month || 0) - (b.month || 0)));
+
+  countLabel.textContent = `총 ${filtered.length}건`;
+
+  if (filtered.length === 0) {
+    tableBody.innerHTML = `<tr class="empty-row"><td colspan="7">항목이 없습니다.</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = filtered.map(e => `
+    <tr data-id="${e.id}">
+      <td class="year">${escapeHtml(e.year)}</td>
+      <td class="month">${e.month ? escapeHtml(e.month) : ''}</td>
+      <td class="region">${escapeHtml(e.region)}</td>
+      <td>${escapeHtml(e.content)}</td>
+      <td>${escapeHtml(e.insight)}</td>
+      <td>${escapeHtml(e.reference)}</td>
+      <td class="actions">
+        <button class="btn-secondary btn-small edit-btn">수정</button>
+        <button class="btn-danger btn-small delete-btn">삭제</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openModal(entry) {
+  editingId = entry ? entry.id : null;
+  modalTitle.textContent = entry ? '항목 수정' : '새 항목 추가';
+  document.getElementById('entryId').value = entry ? entry.id : '';
+  document.getElementById('year').value = entry ? entry.year : '';
+  document.getElementById('month').value = entry ? (entry.month ?? '') : '';
+  document.getElementById('region').value = entry ? entry.region : '';
+  document.getElementById('content').value = entry ? entry.content : '';
+  document.getElementById('insight').value = entry ? (entry.insight ?? '') : '';
+  document.getElementById('reference').value = entry ? entry.reference : '';
+  overlay.classList.add('open');
+  document.getElementById('year').focus();
+}
+
+function closeModal() {
+  overlay.classList.remove('open');
+  editingId = null;
+  entryForm.reset();
+}
+
+document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+entryForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const year = parseInt(document.getElementById('year').value, 10);
+  const monthRaw = document.getElementById('month').value;
+  const month = monthRaw ? parseInt(monthRaw, 10) : null;
+  const region = document.getElementById('region').value.trim();
+  const content = document.getElementById('content').value.trim();
+  const insight = document.getElementById('insight').value.trim();
+  const reference = document.getElementById('reference').value.trim();
+
+  if (editingId) {
+    const target = events.find(ev => ev.id === editingId);
+    Object.assign(target, { year, month, region, content, insight, reference });
+  } else {
+    events.push({ id: crypto.randomUUID(), year, month, region, content, insight, reference });
+  }
+
+  saveEvents(events);
+  closeModal();
+  render();
+});
+
+tableBody.addEventListener('click', (e) => {
+  const row = e.target.closest('tr[data-id]');
+  if (!row) return;
+  const id = row.dataset.id;
+
+  if (e.target.classList.contains('edit-btn')) {
+    const entry = events.find(ev => ev.id === id);
+    openModal(entry);
+  }
+
+  if (e.target.classList.contains('delete-btn')) {
+    if (confirm('이 항목을 삭제하시겠습니까?')) {
+      events = events.filter(ev => ev.id !== id);
+      saveEvents(events);
+      render();
+    }
+  }
+});
+
+searchInput.addEventListener('input', render);
+
+// ---- Save as Markdown (.txt) with user-chosen folder ----
+
+const folderLabel = document.getElementById('folderLabel');
+const filenameInput = document.getElementById('filenameInput');
+const chooseFolderBtn = document.getElementById('chooseFolderBtn');
+const saveMdBtn = document.getElementById('saveMdBtn');
+
+const supportsFsAccess = 'showDirectoryPicker' in window;
+let dirHandle = null;
+
+const IDB_NAME = 'historyAppDB';
+const IDB_STORE = 'handles';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function updateFolderLabel() {
+  if (dirHandle) {
+    folderLabel.innerHTML = `저장 폴더: <strong>${escapeHtml(dirHandle.name)}</strong>`;
+  } else if (!supportsFsAccess) {
+    folderLabel.textContent = '이 브라우저는 폴더 선택을 지원하지 않습니다 (저장 시 다운로드 폴더로 저장됩니다)';
+  } else {
+    folderLabel.textContent = '저장 폴더: 선택 안 됨 (저장 시 다운로드 폴더로 저장됩니다)';
+  }
+}
+
+async function restoreFolder() {
+  if (!supportsFsAccess) { updateFolderLabel(); return; }
+  try {
+    const handle = await idbGet('dirHandle');
+    if (handle) {
+      dirHandle = handle;
+    }
+  } catch {
+    // ignore
+  }
+  updateFolderLabel();
+}
+
+async function chooseFolder() {
+  if (!supportsFsAccess) {
+    alert('이 브라우저는 폴더 선택 기능(File System Access API)을 지원하지 않습니다.\nChrome 또는 Edge 브라우저를 사용해주세요.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker();
+    dirHandle = handle;
+    await idbSet('dirHandle', handle);
+    updateFolderLabel();
+  } catch (err) {
+    if (err.name !== 'AbortError') console.error(err);
+  }
+}
+
+function mdEscape(value) {
+  return String(value ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+}
+
+function buildMarkdown() {
+  const sorted = [...events].sort((a, b) => (a.year - b.year) || ((a.month || 0) - (b.month || 0)));
+  const lines = [
+    '연도 | 월 | 지역 | 내용 | 시사점 | 참고',
+    '---|---|---|---|---|---',
+    ...sorted.map(e => `${e.year} | ${e.month ?? ''} | ${mdEscape(e.region)} | ${mdEscape(e.content)} | ${mdEscape(e.insight)} | ${mdEscape(e.reference)}`),
+  ];
+  return lines.join('\n') + '\n';
+}
+
+function downloadFallback(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function resolveFilename() {
+  let name = filenameInput.value.trim() || '역사연표.txt';
+  if (!name.toLowerCase().endsWith('.txt')) name += '.txt';
+  return name;
+}
+
+async function saveMarkdown() {
+  const md = buildMarkdown();
+  const filename = resolveFilename();
+
+  if (dirHandle) {
+    try {
+      let perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+      }
+      if (perm === 'granted') {
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(md);
+        await writable.close();
+        alert(`저장되었습니다: ${dirHandle.name}/${filename}`);
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      alert('선택한 폴더에 저장하지 못했습니다. 다운로드 폴더로 대신 저장합니다.');
+    }
+  }
+
+  downloadFallback(md, filename);
+}
+
+chooseFolderBtn.addEventListener('click', chooseFolder);
+saveMdBtn.addEventListener('click', saveMarkdown);
+
+restoreFolder();
+render();
+</script>
+
+</body>
+</html>
