@@ -238,6 +238,10 @@
         <input type="text" id="reference">
       </div>
       <div class="modal-actions">
+        <label id="continueAddLabel" style="display:flex; align-items:center; gap:6px; margin-right:auto; font-size:13px; color:var(--muted); font-weight:normal;">
+          <input type="checkbox" id="continueAdd">
+          저장 후 계속 추가
+        </label>
         <button type="button" class="btn-secondary" id="cancelBtn">취소</button>
         <button type="submit" class="btn-primary">저장</button>
       </div>
@@ -280,6 +284,8 @@ const searchInput = document.getElementById('searchInput');
 const overlay = document.getElementById('overlay');
 const entryForm = document.getElementById('entryForm');
 const modalTitle = document.getElementById('modalTitle');
+const continueAddLabel = document.getElementById('continueAddLabel');
+const continueAdd = document.getElementById('continueAdd');
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -332,6 +338,8 @@ function openModal(entry) {
   document.getElementById('content').value = entry ? entry.content : '';
   document.getElementById('insight').value = entry ? (entry.insight ?? '') : '';
   document.getElementById('reference').value = entry ? entry.reference : '';
+  continueAddLabel.style.display = entry ? 'none' : 'flex';
+  if (entry) continueAdd.checked = false;
   overlay.classList.add('open');
   document.getElementById('year').focus();
 }
@@ -356,6 +364,8 @@ entryForm.addEventListener('submit', (e) => {
   const insight = document.getElementById('insight').value.trim();
   const reference = document.getElementById('reference').value.trim();
 
+  const wasEditing = !!editingId;
+
   if (editingId) {
     const target = events.find(ev => ev.id === editingId);
     Object.assign(target, { year, month, region, content, insight, reference });
@@ -364,8 +374,17 @@ entryForm.addEventListener('submit', (e) => {
   }
 
   saveEvents(events);
-  closeModal();
   render();
+
+  if (!wasEditing && continueAdd.checked) {
+    const keepAdding = continueAdd.checked;
+    entryForm.reset();
+    document.getElementById('entryId').value = '';
+    continueAdd.checked = keepAdding;
+    document.getElementById('year').focus();
+  } else {
+    closeModal();
+  }
 });
 
 tableBody.addEventListener('click', (e) => {
