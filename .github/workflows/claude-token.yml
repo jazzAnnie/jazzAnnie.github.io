@@ -1,0 +1,92 @@
+# TechNote · Claude 단기 액세스 토큰 발급 (Workload Identity Federation, API Key 미사용)
+# 실행: GitHub 저장소 → Actions → "Claude token (OIDC)" → Run workflow (main 브랜치)
+# 결과: 실행 요약(Summary)에 암호화된 토큰 코드(TNTOK1.…) 출력 → TechNote [설정]에 붙여넣기
+#
+# 사전 준비 (저장소 Settings → Secrets and variables → Actions)
+#   Variables : ANTHROPIC_FEDERATION_RULE_ID  (fdrl_...)
+#               ANTHROPIC_ORGANIZATION_ID     (UUID)
+#               ANTHROPIC_SERVICE_ACCOUNT_ID  (svac_...)
+#               ANTHROPIC_WORKSPACE_ID        (wrkspc_..., 규칙이 단일 워크스페이스면 생략 가능)
+#               ANTHROPIC_OIDC_AUDIENCE       (선택, 기본 https://api.anthropic.com)
+#   Secrets   : TOKEN_PASSPHRASE              (토큰 암호화 문구, TechNote 설정에도 동일하게 입력)
+
+name: Claude token (OIDC)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # GitHub OIDC JWT 발급
+  contents: read
+
+concurrency:
+  group: claude-token
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Exchange GitHub OIDC JWT → Claude access token (encrypted)
+        uses: actions/github-script@v8
+        env:
+          RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORG_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SVAC_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          WS_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          AUDIENCE: ${{ vars.ANTHROPIC_OIDC_AUDIENCE }}
+          PASSPHRASE: ${{ secrets.TOKEN_PASSPHRASE }}
+        with:
+          script: |
+            const env = process.env;
+            for (const k of ['RULE_ID', 'ORG_ID', 'SVAC_ID', 'PASSPHRASE']) {
+              if (!env[k]) return core.setFailed(`필수 설정 누락: ${k} (워크플로 상단 주석의 Variables/Secrets 확인)`);
+            }
+
+            // 1) GitHub OIDC JWT (약 5분 유효, 매 실행마다 새로 발급 → jti 재사용 없음)
+            const jwt = await core.getIDToken(env.AUDIENCE || 'https://api.anthropic.com');
+
+            // 2) RFC 7523 jwt-bearer 교환
+            const body = {
+              grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              assertion: jwt,
+              federation_rule_id: env.RULE_ID,
+              organization_id: env.ORG_ID,
+              service_account_id: env.SVAC_ID
+            };
+            if (env.WS_ID) body.workspace_id = env.WS_ID;
+            const res = await fetch('https://api.anthropic.com/v1/oauth/token', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok || !j.access_token) {
+              return core.setFailed(`토큰 교환 실패 HTTP ${res.status}: ${JSON.stringify(j.error || j)} — Console > Workload identity > 인증 이력에서 거부 사유 확인`);
+            }
+            core.setSecret(j.access_token);   // 로그 마스킹
+
+            // 3) AES-256-GCM 암호화 (PBKDF2-SHA256 200,000회) — 평문 토큰은 어디에도 출력하지 않음
+            const { webcrypto: wc } = require('crypto');
+            const enc = new TextEncoder();
+            const b64u = b => Buffer.from(b).toString('base64url');
+            const salt = wc.getRandomValues(new Uint8Array(16));
+            const iv = wc.getRandomValues(new Uint8Array(12));
+            const base = await wc.subtle.importKey('raw', enc.encode(env.PASSPHRASE), 'PBKDF2', false, ['deriveKey']);
+            const key = await wc.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+              base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+            const expiresAt = Date.now() + (j.expires_in || 600) * 1000;
+            const plain = enc.encode(JSON.stringify({ t: j.access_token, e: expiresAt, s: j.scope || '' }));
+            const ct = await wc.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+            const code = ['TNTOK1', b64u(salt), b64u(iv), b64u(ct)].join('.');
+
+            const until = new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+            await core.summary
+              .addHeading('Claude 액세스 토큰 (암호화)', 3)
+              .addRaw(`유효기간: ${Math.round((j.expires_in || 600) / 60)}분 (${until} KST 까지) · scope: ${j.scope || '-'}`, true)
+              .addCodeBlock(code)
+              .addRaw('위 코드를 복사해 TechNote [설정] → 액세스 토큰 칸에 붙여넣으세요. 복호화에는 TOKEN_PASSPHRASE가 필요합니다.', true)
+              .write();
+            core.info('암호화된 토큰을 실행 요약(Summary)에 기록했습니다.');
